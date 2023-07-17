@@ -3,27 +3,31 @@
     <div class="header">
       <t-row justify="space-between">
         <div class="left-operation-container">
-          <t-tag size="large" shape="mark">添加源后需设置默认哟！</t-tag>
-        </div>
-        <div class="right-operation-container">
           <div class="component-op">
-            <div class="item" @click="exportEvent">
-              <arrow-up-icon size="1.5em" />
-              <span>导出</span>
-            </div>
-            <div class="item" @click="removeAllEvent">
-              <remove-icon size="1.5em" />
-              <span>删除</span>
-            </div>
             <div class="item" @click="formDialogVisibleAddApi = true">
-              <add-icon size="1.5em" />
+              <add-icon />
               <span>添加</span>
             </div>
+            <div class="item" @click="removeAllEvent">
+              <remove-icon />
+              <span>删除</span>
+            </div>
+            <div class="item" @click="exportEvent">
+              <arrow-up-icon />
+              <span>导出</span>
+            </div>
             <div class="item" @click="checkAllSite">
-              <refresh-icon size="1.5em" />
+              <refresh-icon />
               <span>检测</span>
             </div>
           </div>
+        </div>
+        <div class="right-operation-container">
+          <t-input v-model="searchValue" placeholder="请输入搜索关键词" clearable @enter="refreshEvent">
+            <template #suffix-icon>
+              <search-icon size="16px" />
+            </template>
+          </t-input>
         </div>
       </t-row>
     </div>
@@ -31,13 +35,11 @@
       row-key="id"
       :data="emptyData ? [] : data"
       :sort="sort"
-      height="calc(100vh - 240px)"
+      height="calc(100vh - 205px)"
       :columns="COLUMNS"
       :hover="true"
       :pagination="pagination"
       :loading="dataLoading"
-      :header-affixed-top="{ offsetTop: 0, container: `.setting-site-container` }"
-      :reserve-selected-row-on-paginate="false"
       @sort-change="rehandleSortChange"
       @select-change="rehandleSelectChange"
       @page-change="rehandlePageChange"
@@ -83,7 +85,7 @@
 </template>
 <script setup lang="ts">
 import { useEventBus } from '@vueuse/core';
-import { AddIcon, ArrowUpIcon, RefreshIcon, RemoveIcon } from 'tdesign-icons-vue-next';
+import { AddIcon, ArrowUpIcon, RefreshIcon, RemoveIcon, SearchIcon } from 'tdesign-icons-vue-next';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { onMounted, ref } from 'vue';
 
@@ -103,6 +105,7 @@ const formData = ref();
 const isCheckStatusChangeActive = ref();
 const formGroup = ref();
 const sort = ref();
+const searchValue = ref();
 
 // Define table
 const emptyData = ref(false);
@@ -124,11 +127,10 @@ const getSites = async () => {
   dataLoading.value = true;
   defaultSite.value = await setting.get('defaultSite');
   try {
-    await sites.pagination().then((res) => {
-      if (!res) emptyData.value = true;
-      data.value = res.list;
-      pagination.value.total = res.total;
-    });
+    const res = await sites.pagination(searchValue.value);
+    if (!res) emptyData.value = true;
+    data.value = res.list;
+    pagination.value.total = res.total;
   } catch (e) {
     console.log(e);
   } finally {
@@ -287,13 +289,12 @@ const defaultEvent = async (row) => {
 </script>
 
 <style lang="less" scoped>
-@import '@/style/variables.less';
 .setting-site-container {
   height: calc(100vh - var(--td-comp-size-l));
   overflow: auto;
 
   .header {
-    margin: 0 10px 10px 10px;
+    margin-bottom: var(--td-comp-margin-s);
   }
   .t-button-link {
     margin-right: var(--td-comp-margin-xxl);
@@ -305,22 +306,22 @@ const defaultEvent = async (row) => {
     border-radius: var(--td-radius-circle);
     background-color: var(--td-error-color);
   }
-  .right-operation-container {
+  .left-operation-container {
     .component-op {
       display: flex;
-      padding: 4px;
-      height: 40px;
+      height: 32px;
+      padding: 0 var(--td-comp-paddingLR-xs);
       background-color: var(--td-bg-input);
       backdrop-filter: blur(10px);
-      border-radius: 6px;
+      border-radius: var(--td-radius-default);
       align-items: center;
       .item {
-        border-radius: 5px;
+        border-radius: var(--td-radius-default);
         transition: all 0.2s ease 0s;
         display: flex;
         align-items: center;
-        padding: 5px 8px;
-        line-height: 22px;
+        padding: 2px 4px;
+        height: 22px;
         cursor: pointer;
         text-decoration: none;
       }

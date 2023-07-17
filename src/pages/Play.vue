@@ -38,10 +38,12 @@
                     placeholder="请选下载源"
                     size="small"
                     style="width: 200px; display: inline-block"
+                    @change="downloadSourceChange"
                   >
-                    <t-option v-for="(value, key, index) in season" :key="index" :value="key" :label="key"></t-option>
+                    <t-option v-for="(item, key) in season" :key="key" :value="key">{{ key }}</t-option>
                   </t-select>
-                  <div>仅支持m3u8播放源</div>
+                  <t-button size="small" theme="default" @click="copyCurrentUrl">复制当前地址</t-button>
+                  <!-- <div>仅支持后缀为m3u8、flv、mp4</div> -->
                 </div>
                 <div class="content-warp">
                   <t-transfer v-model="downloadTarget" :data="downloadEpisodes">
@@ -116,28 +118,28 @@
           <div class="player-container">
             <div v-show="!onlineUrl" class="player-media">
               <div
-                v-if="set.broadcasterType === 'xgplayer'"
+                v-show="set.broadcasterType === 'xgplayer'"
                 id="xgplayer"
                 ref="xgpayerRef"
                 class="xgplayer player"
               ></div>
               <div
-                v-if="set.broadcasterType === 'veplayer'"
+                v-show="set.broadcasterType === 'veplayer'"
                 id="veplayer"
                 ref="vepayerRef"
                 class="veplayer player"
               ></div>
-              <div v-if="set.broadcasterType === 'tcplayer'" ref="tcplayerRef">
+              <div v-show="set.broadcasterType === 'tcplayer'" ref="tcplayerRef">
                 <video id="tcplayer" preload="auto" playsinline webkit-playsinline class="tcplayer player"></video>
               </div>
               <div
-                v-if="set.broadcasterType === 'aliplayer'"
+                v-show="set.broadcasterType === 'aliplayer'"
                 id="aliplayer"
                 ref="aliplayerRef"
                 class="aliplayer player"
               ></div>
               <div
-                v-if="set.broadcasterType === 'artplayer'"
+                v-show="set.broadcasterType === 'artplayer'"
                 id="artplayer"
                 ref="artplayerRef"
                 class="artplayer player"
@@ -270,7 +272,13 @@
                   </div>
                 </div>
                 <div class="anthology-contents-scroll">
-                  <h4 class="box-anthology-title">选集</h4>
+                  <div class="box-anthology-header">
+                    <h4 class="box-anthology-title">选集</h4>
+                    <div class="box-anthology-reverse-order" @click="reverseOrderEvent">
+                      <order-descending-icon v-if="reverseOrder" size="1.3em" />
+                      <order-ascending-icon v-else size="1.3em" />
+                    </div>
+                  </div>
                   <div class="box-anthology-items">
                     <t-tabs v-model="selectPlaySource" class="film-tabs">
                       <t-tab-panel v-for="(value, key, index) in season" :key="index" :value="key">
@@ -408,6 +416,8 @@ import {
   HeartIcon,
   HomeIcon,
   LoadingIcon,
+  OrderAscendingIcon,
+  OrderDescendingIcon,
   PinFilledIcon,
   PinIcon,
   SettingIcon,
@@ -430,7 +440,7 @@ import playerVoiceNoIcon from '@/assets/player/voice-no.svg?raw';
 import playerZoomIcon from '@/assets/player/zoom.svg?raw';
 import playerZoomExitIcon from '@/assets/player/zoom-s.svg?raw';
 import windowView from '@/layouts/components/Window.vue';
-import { analyze, channelList, history, setting, star } from '@/lib/dexie';
+import { analyze, channelList, history, setting, sites, star } from '@/lib/dexie';
 import zy from '@/lib/utils/tools';
 import { usePlayStore } from '@/store';
 
@@ -718,6 +728,7 @@ const isSniff = ref(true); // 嗅探标识
 const iframeRef = ref(); // iframe dom节点
 const currentUrl = ref(); // 当前未解析前的url
 const snifferTimer = ref();
+const reverseOrder = ref(true); // true 正序 false 倒序
 
 const onlinekey = new Date().getTime(); // 解决iframe不刷新问题
 
@@ -775,28 +786,6 @@ const renderLoading = () => {
   );
 };
 
-watch(
-  () => downloadSource.value,
-  (val) => {
-    if (val) {
-      const list = [];
-      for (const item of season.value[downloadSource.value]) {
-        const [index, url] = item.split('$');
-        if (!url.endsWith('m3u8')) {
-          MessagePlugin.info('注意: 当前选择非m3u8播放源');
-          break;
-        }
-        list.push({
-          value: url,
-          label: index,
-          disabled: false,
-        });
-      }
-      downloadEpisodes.value = list;
-    }
-  },
-);
-
 // 添加画中画事件
 watch(
   () => xg.value,
@@ -822,8 +811,20 @@ watch(
 onMounted(() => {
   initPlayer();
   minMaxEvent();
-  console.log(skipConfig.value);
 });
+
+// 选集排序
+const seasonReverseOrder = () => {
+  if (reverseOrder.value) {
+    console.log('正序');
+    season.value = JSON.parse(JSON.stringify(info.value.fullList));
+  } else {
+    console.log('倒序');
+    for (const key in season.value) {
+      season.value[key].reverse();
+    }
+  }
+};
 
 // 根据不同类型加载不同播放器
 const createPlayer = async (videoType) => {
@@ -1054,7 +1055,6 @@ const initFilmPlayer = async (isFirst) => {
       config.value.startTime = skipConfig.value.skipTimeInStart;
     }
   }
-
   if (ext.value.site.type === 2) {
     MessagePlugin.info('免嗅资源中, 请等待!');
     console.log('[player] drpy免嗅流程开始');
@@ -1080,7 +1080,13 @@ const initFilmPlayer = async (isFirst) => {
 
     if (playUrl) {
       const play = await zy.getConfig(`${playUrl}${config.value.url}`);
-      if (play.url) config.value.url = play.url;
+      console.log(`解析地址:${play.url}`);
+      if (play.url) {
+        config.value.url = play.url;
+        const fileExtension = play.url.match(/\.([^/?#]+)(?:[?#]|$)/i)[1];
+        createPlayer(fileExtension);
+        return;
+      }
     }
 
     const { hostname } = new URL(config.value.url);
@@ -1238,7 +1244,7 @@ const getDetailInfo = async () => {
 
   // 播放源
   const playFrom = videoList.vod_play_from;
-  const playSource = playFrom.split('$').filter((e) => e);
+  const playSource = playFrom.split('$').filter(Boolean);
   const [source] = playSource;
   if (!selectPlaySource.value) selectPlaySource.value = source;
 
@@ -1249,11 +1255,6 @@ const getDetailInfo = async () => {
     item
       .replace(/\$+/g, '$')
       .split('#')
-      .filter((e) => {
-        if (e && (e.startsWith('http') || (e.split('$')[1] && e.split('$')[1].startsWith('http')))) return true;
-        if (!e.includes('$')) return true;
-        return false;
-      })
       .map((e) => {
         if (!e.includes('$')) e = `正片$${e}`;
         return e;
@@ -1262,11 +1263,12 @@ const getDetailInfo = async () => {
   if (!selectPlayIndex.value) selectPlayIndex.value = playEpisodes[0][0].split('$')[0];
 
   // 合并播放源和剧集
-  const fullList = Object.fromEntries(playSource.map((key, i) => [key, playEpisodes[i]]));
+  const fullList = Object.fromEntries(playSource.map((key, index) => [key, playEpisodes[index]]));
 
   videoList.fullList = fullList;
   info.value = videoList;
   season.value = fullList;
+  seasonReverseOrder();
   console.log(info.value, season.value);
 };
 
@@ -1339,6 +1341,7 @@ const changeIptvEvent = async (e) => {
 // 获取豆瓣影片推荐
 const getDoubanRecommend = async () => {
   const { key } = ext.value.site;
+  const { type } = await sites.find({ key });
   const name = info.value.vod_name;
   const year = info.value.vod_year;
   const id = info.value.vod_douban_id;
@@ -1351,11 +1354,16 @@ const getDoubanRecommend = async () => {
       const item = await zy.search(key, element);
 
       if (item && ids.length < 10) {
-        ids.push(item[0].vod_id);
+        ids.push(item[0]);
       }
     }
-    const res = await zy.detail(key, ids.join(','));
-    recommend.value = res;
+
+    if (type === 3) recommend.value = ids;
+    else {
+      const vodIds = ids.map((movie) => movie.vod_id);
+      const res = await zy.detail(key, vodIds.join(','));
+      recommend.value = res;
+    }
   } catch (err) {
     console.log(err);
   }
@@ -1511,14 +1519,26 @@ const getChannelList = async () => {
   const sourceLength = res.list.length;
 
   if (data.value.ext.skipIpv6) {
-    const filteredList = await Promise.all(
-      res.list.map(async (item: { url: string }) => {
-        if ((await zy.checkUrlIpv6(item.url)) !== 'IPv6') {
-          return item;
+    const newdata = await Promise.allSettled(
+      res.list.map(async (item) => {
+        try {
+          const checkStatus = await zy.checkUrlIpv6(item.url);
+          if (checkStatus !== 'IPv6') return item;
+          return false;
+        } catch (err) {
+          console.log(err);
+          return false;
         }
       }),
     );
-    res.list = filteredList.filter(Boolean);
+
+    res.list = newdata
+      .filter((result) => result.status === 'fulfilled' && result.value !== false)
+      .map((result) => {
+        if (result.status === 'fulfilled') return result.value;
+        return null;
+      })
+      .filter((item) => item !== null);
   }
 
   const restultLength = res.list.length;
@@ -1548,6 +1568,12 @@ const getEpgList = async (url, name, date) => {
   }
 };
 
+// 选择倒序
+const reverseOrderEvent = () => {
+  reverseOrder.value = !reverseOrder.value;
+  seasonReverseOrder();
+};
+
 // 推荐刷新数据
 const recommendEvent = (e) => {
   info.value = e;
@@ -1569,11 +1595,30 @@ const recommendEvent = (e) => {
 
 const copyToClipboard = (content, successMessage, errorMessage) => {
   copy(content);
-  if (isSupported) {
-    MessagePlugin.info(successMessage);
-  } else {
-    MessagePlugin.warning(errorMessage);
+  if (isSupported) MessagePlugin.info(successMessage);
+  else MessagePlugin.warning(errorMessage);
+};
+
+// 检查复制的复制
+const checkDownloadUrl = (url) => {
+  const allowedExtensions = ['m3u8', 'flv', 'mp4'];
+  const isValid = allowedExtensions.some((ext) => url.endsWith(ext));
+
+  if (!isValid) MessagePlugin.warning('注意: 当前选择非m3u8/flv/mp4播放源');
+};
+
+// 复制下载地址列表
+const downloadSourceChange = () => {
+  const list = [];
+  for (const item of season.value[downloadSource.value]) {
+    const [index, url] = item.split('$');
+    list.push({
+      value: url,
+      label: index,
+      disabled: false,
+    });
   }
+  downloadEpisodes.value = list;
 };
 
 // 复制下载链接
@@ -1584,10 +1629,21 @@ const copyDownloadUrl = () => {
     const successMessage = '复制成功，快到下载器里下载吧!';
     const errorMessage = '复制失败，当前环境不支持一键复制!';
     copyToClipboard(downloadUrl, successMessage, errorMessage);
+    checkDownloadUrl(downloadUrl[0]);
     isDownloadVisible.value = false;
   } else {
     MessagePlugin.warning('请先选择需要下载的内容!');
   }
+};
+
+// 复制当前播放地址
+const copyCurrentUrl = () => {
+  const successMessage = '复制成功,使用第三方播放器播放!';
+  const errorMessage = '当前环境不支持一键复制,请手动复制链接!';
+  copyToClipboard(config.value.url, successMessage, errorMessage);
+  checkDownloadUrl(config.value.url);
+
+  isDownloadVisible.value = false;
 };
 
 // 更新历史跳过参数
@@ -2110,17 +2166,22 @@ const openMainWinEvent = () => {
                 margin-top: 5px;
                 overflow-y: auto;
                 overflow-x: hidden;
-
-                .box-anthology-title {
-                  position: relative;
-                  font-size: 18px;
-                  line-height: 25px;
-                  color: hsla(0, 0%, 100%, 0.9);
-                  font-weight: 600;
+                .box-anthology-header {
+                  display: flex;
+                  justify-content: space-between;
+                  .box-anthology-title {
+                    position: relative;
+                    font-size: 18px;
+                    line-height: 25px;
+                    color: hsla(0, 0%, 100%, 0.9);
+                    font-weight: 600;
+                  }
+                  .box-anthology-reverse-order {
+                    cursor: pointer;
+                  }
                 }
 
                 .box-anthology-items {
-                  padding-bottom: 18px;
                   overflow: hidden;
 
                   .film-tabs {
